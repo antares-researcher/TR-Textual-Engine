@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trevia Editor Engine Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .editor-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .toolbar {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .toolbar button {
+            background: #3498db;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .toolbar button:hover {
+            background: #2980b9;
+        }
+
+        .toolbar .info {
+            margin-left: auto;
+            font-size: 14px;
+            opacity: 0.8;
+        }
+
+        .pages-container {
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            align-items: center;
+            min-height: 600px;
+            max-height: 85vh;
+            overflow-y: auto;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+            background: #f8f9fa;
+        }
+
+        .pages-container::-webkit-scrollbar {
+            width: 12px;
+        }
+
+        .pages-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 6px;
+        }
+
+        .pages-container::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 6px;
+        }
+
+        .pages-container::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        .page {
+            width: 794px;  /* A4 width at 96 DPI: 210mm = ~794px */
+            height: 1123px; /* A4 height at 96 DPI: 297mm = ~1123px */
+            background: white;
+            border: 1px solid #ddd;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 20px;
+            flex-shrink: 0;
+        }
+
+        .page canvas {
+            width: 100%;
+            height: 100%;
+            cursor: text;
+            outline: none;
+        }
+
+        .editor-focused {
+            outline: 2px solid #3498db;
+            outline-offset: -2px;
+        }
+
+        .hidden-input {
+            position: absolute;
+            left: -9999px;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .page-number {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            font-size: 12px;
+            color: #666;
+            background: rgba(255,255,255,0.8);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .cursor {
+            position: absolute;
+            width: 2px;
+            background: #000;
+            animation: blink 1s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        .status-bar {
+            background: #ecf0f1;
+            padding: 10px 20px;
+            border-top: 1px solid #ddd;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="editor-container">
+        <div class="toolbar">
+            <button onclick="insertSampleText()">Inserir Texto de Exemplo</button>
+            <button onclick="clearDocument()">Limpar Documento</button>
+            <button onclick="scrollToTop()">⬆ Início</button>
+            <button onclick="scrollToBottom()">⬇ Final</button>
+            <button onclick="toggleDebug()">Debug</button>
+            <div class="info">
+                <span id="page-info">Páginas: 0</span> |
+                <span id="cursor-info">Cursor: 0</span> |
+                <span id="length-info">Caracteres: 0</span>
+            </div>
+        </div>
+
+        <div class="pages-container" id="pages-container">
+            <div class="loading">Carregando Trevia Editor Engine...</div>
+        </div>
+
+        <div class="status-bar">
+            <span id="status">Inicializando...</span>
+        </div>
+    </div>
+
+    <script type="module">
+        import init, { TreviaEditor } from './pkg/trevia_editor_engine.js';
+
+        let editor = null;
+        let canvases = [];
+        let debugMode = false;
+
+        async function initEditor() {
+            try {
+                await init();
+                
+                const pageWidth = 794;   // A4 width at 96 DPI
+                const pageHeight = 1123;  // A4 height at 96 DPI
+                
+                editor = new TreviaEditor(pageWidth, pageHeight);
+                editor.set_margins(60, 60, 60, 60);
+                
+                updateUI();
+                updateStatus('Editor inicializado com sucesso!');
+                
+                setupEventListeners();
+                
+            } catch (error) {
+                console.error('Erro ao inicializar editor:', error);
+                updateStatus('Erro ao inicializar editor: ' + error.message);
+            }
+        }
+
+        function setupEventListeners() {
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keypress', handleKeyPress);
+        }
+
+        function handleKeyDown(event) {
+            if (!editor) return;
+
+            const key = event.key;
+            
+            if (key === 'Backspace') {
+                event.preventDefault();
+                editor.delete_text(1);
+                renderPages();
+                updateUI();
+            } else if (key === 'Delete') {
+                event.preventDefault();
+                // Implementar delete para frente
+            } else if (key === 'ArrowLeft') {
+                event.preventDefault();
+                editor.move_cursor_by(-1);
+                updateUI();
+            } else if (key === 'ArrowRight') {
+                event.preventDefault();
+                editor.move_cursor_by(1);
+                updateUI();
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (!editor) return;
+            
+            const char = event.key;
+            
+            if (char.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
+                event.preventDefault();
+                editor.insert_text(char);
+                renderPages();
+                updateUI();
+            }
+        }
+
+        function handleCanvasClick(event, pageIndex) {
+            if (!editor) return;
+            
+            const canvas = event.target;
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            // Ajustar coordenadas para o sistema interno
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            if (editor.handle_click(pageIndex, x * scaleX, y * scaleY)) {
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            if (!editor) return;
+            
+            editor.recompute_layout();
+            
+            const pageCount = editor.get_page_count();
+            const cursorPos = editor.get_cursor_position();
+            const docLength = editor.get_document_length();
+            
+            document.getElementById('page-info').textContent = `Páginas: ${pageCount}`;
+            document.getElementById('cursor-info').textContent = `Cursor: ${cursorPos.offset}`;
+            document.getElementById('length-info').textContent = `Caracteres: ${docLength}`;
+            
+            renderPages();
+        }
+
+        function renderPages() {
+            if (!editor) return;
+            
+            const container = document.getElementById('pages-container');
+            const pageCount = editor.get_page_count();
+            
+            // Limpar páginas existentes
+            container.innerHTML = '';
+            canvases = [];
+            
+            for (let i = 0; i < Math.max(1, pageCount); i++) {
+                const pageDiv = document.createElement('div');
+                pageDiv.className = 'page';
+                
+                const canvas = document.createElement('canvas');
+                canvas.width = 794;   // A4 width
+                canvas.height = 1123;  // A4 height
+                canvas.addEventListener('click', (e) => handleCanvasClick(e, i));
+                
+                const pageNumber = document.createElement('div');
+                pageNumber.className = 'page-number';
+                pageNumber.textContent = `Página ${i + 1}`;
+                
+                pageDiv.appendChild(canvas);
+                pageDiv.appendChild(pageNumber);
+                container.appendChild(pageDiv);
+                
+                canvases.push(canvas);
+                renderPage(canvas, i);
+            }
+        }
+
+        function renderPage(canvas, pageIndex) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Fundo da página
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Margens (visual)
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(60, 60, canvas.width - 120, canvas.height - 120);
+            ctx.setLineDash([]);
+            
+            if (!editor) return;
+            
+            const pageLayout = editor.get_page_layout(pageIndex);
+            if (!pageLayout) return;
+            
+            try {
+                const layout = pageLayout;
+                
+                ctx.fillStyle = '#000000';
+                ctx.font = '14px Arial';  // Fonte maior e mais legível
+                
+                if (layout.lines) {
+                    layout.lines.forEach(line => {
+                        if (line.text && line.text.trim()) {
+                            ctx.fillText(line.text, 70, line.y_position + 18);
+                        }
+                    });
+                }
+                
+                // Renderizar cursor se estiver nesta página
+                const cursorPos = editor.get_cursor_position();
+                if (cursorPos.page === pageIndex) {
+                    const screenPos = editor.get_cursor_screen_position();
+                    if (screenPos) {
+                        ctx.strokeStyle = '#000000';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(screenPos.x + 70, screenPos.y);
+                        ctx.lineTo(screenPos.x + 70, screenPos.y + 20);
+                        ctx.stroke();
+                    }
+                }
+                
+            } catch (error) {
+                console.error('Erro ao renderizar página:', error);
+            }
+        }
+
+        function insertSampleText() {
+            if (!editor) return;
+            
+            const sampleText = `TREVIA EDITOR ENGINE - DEMONSTRAÇÃO
+
+Este é um exemplo de texto formatado no Trevia Editor Engine com dimensões de página A4 (210mm x 297mm).
+
+CARACTERÍSTICAS PRINCIPAIS:
+
+1. PAGINAÇÃO AUTOMÁTICA
+O editor suporta múltiplas páginas com paginação automática inteligente. Quando o texto excede o limite de uma página, automaticamente uma nova página é criada mantendo a continuidade do fluxo de texto.
+
+2. FORMATO A4 PADRÃO  
+As páginas utilizam dimensões A4 padrão (794x1123 pixels a 96 DPI), proporcionando uma experiência familiar e profissional de edição de documentos.
+
+3. ARQUITETURA WEBASSEMBLY
+Esta é uma implementação usando WebAssembly com Rust para alta performance nos cálculos de layout e JavaScript para renderização no canvas, oferecendo velocidade próxima ao nativo.
+
+4. FUNCIONALIDADES IMPLEMENTADAS:
+- Modelo de documento unificado em memória
+- Layout engine customizado otimizado
+- Paginação automática com quebras inteligentes
+- Sincronização perfeita entre páginas
+- Performance otimizada para documentos longos
+- Scroll suave para navegação entre páginas
+- Margens apropriadas para impressão
+
+5. EXPERIÊNCIA DO USUÁRIO
+Você pode continuar digitando e o texto será distribuído automaticamente entre as páginas conforme necessário. O cursor funciona em qualquer página e a edição é sincronizada em tempo real.
+
+6. TECNOLOGIAS UTILIZADAS
+- Rust + WebAssembly para o core
+- JavaScript para interface e renderização
+- Canvas HTML5 para desenho das páginas
+- CSS3 para estilização responsiva
+
+Este texto demonstra como o editor lida com conteúdo longo, distribuindo-o automaticamente entre múltiplas páginas mantendo a formatação e permitindo edição contínua.
+
+Continue digitando para testar a paginação automática...`;
+            
+            editor.insert_text(sampleText);
+            renderPages();
+            updateUI();
+        }
+
+        function clearDocument() {
+            if (!editor) return;
+            
+            const length = editor.get_document_length();
+            if (length > 0) {
+                editor.set_cursor_position(0);
+                editor.set_selection(0, length);
+                editor.delete_selection();
+                renderPages();
+                updateUI();
+            }
+        }
+
+        function toggleDebug() {
+            debugMode = !debugMode;
+            updateStatus(`Debug mode: ${debugMode ? 'ON' : 'OFF'}`);
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        function scrollToTop() {
+            const container = document.getElementById('pages-container');
+            container.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function scrollToBottom() {
+            const container = document.getElementById('pages-container');
+            container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        }
+
+        // Tornar funções globais para os botões
+        window.insertSampleText = insertSampleText;
+        window.clearDocument = clearDocument;
+        window.scrollToTop = scrollToTop;
+        window.scrollToBottom = scrollToBottom;
+        window.toggleDebug = toggleDebug;
+
+        // Inicializar quando a página carregar
+        initEditor();
+    </script>
+</body>
+</html>

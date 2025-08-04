@@ -1,0 +1,32 @@
+# Rust
+/target
+/Cargo.lock
+
+# WebAssembly
+/pkg
+/pkg-node
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.wasm
+*.js.map
+
+# Temporary files
+*.tmp
+*.temp

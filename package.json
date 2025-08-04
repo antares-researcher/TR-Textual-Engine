@@ -1,0 +1,32 @@
+{
+  "name": "trevia-editor-engine",
+  "version": "0.1.0",
+  "description": "A high-performance text editor engine with pagination support built with WebAssembly",
+  "main": "pkg/trevia_editor_engine.js",
+  "types": "pkg/trevia_editor_engine.d.ts",
+  "scripts": {
+    "build": "wasm-pack build --target web --out-dir pkg",
+    "build:node": "wasm-pack build --target nodejs --out-dir pkg-node",
+    "dev": "npm run build && npm run serve",
+    "serve": "python3 -m http.server 8000",
+    "test": "wasm-pack test --node"
+  },
+  "files": [
+    "pkg/**/*",
+    "src/**/*",
+    "Cargo.toml"
+  ],
+  "keywords": [
+    "webassembly",
+    "text-editor",
+    "pagination",
+    "rust",
+    "wasm"
+  ],
+  "author": "Trevia Editor Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0"
+  },
+  "dependencies": {}
+}

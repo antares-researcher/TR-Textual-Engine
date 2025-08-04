@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Básico Trevia Editor</title>
+</head>
+<body>
+    <h1>Teste WebAssembly</h1>
+    <div id="output"></div>
+    
+    <script type="module">
+        import init, { TreviaEditor } from './pkg/trevia_editor_engine.js';
+
+        async function test() {
+            try {
+                await init();
+                console.log('WebAssembly inicializado com sucesso!');
+                
+                const editor = new TreviaEditor(800, 1000);
+                editor.set_margins(50, 50, 50, 50);
+                
+                console.log('Editor criado:', editor);
+                console.log('Páginas iniciais:', editor.get_page_count());
+                
+                editor.insert_text('Hello, Trevia Editor Engine!');
+                editor.recompute_layout();
+                
+                console.log('Texto inserido:', editor.get_document_text());
+                console.log('Páginas após inserção:', editor.get_page_count());
+                console.log('Comprimento do documento:', editor.get_document_length());
+                
+                const layout = editor.get_page_layout(0);
+                console.log('Layout da primeira página:', layout);
+                
+                document.getElementById('output').innerHTML = `
+                    <p>✅ WebAssembly funcionando!</p>
+                    <p>Texto: "${editor.get_document_text()}"</p>
+                    <p>Páginas: ${editor.get_page_count()}</p>
+                    <p>Comprimento: ${editor.get_document_length()}</p>
+                `;
+                
+            } catch (error) {
+                console.error('Erro:', error);
+                document.getElementById('output').innerHTML = `❌ Erro: ${error.message}`;
+            }
+        }
+        
+        test();
+    </script>
+</body>
+</html>
