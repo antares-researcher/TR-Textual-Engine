@@ -168,14 +168,20 @@ impl LayoutEngine {
     }
 
     fn get_paragraphs_data(&self, document: &DocumentModel) -> Vec<ParagraphData> {
-        if let Ok(paragraphs_js) = serde_wasm_bindgen::from_value::<Vec<Paragraph>>(document.paragraphs_js()) {
-            paragraphs_js.into_iter().map(|p| ParagraphData {
-                text: p.get_text(),
-                runs: p.runs,
-            }).collect()
-        } else {
-            Vec::new()
+        let text = document.get_text();
+        if text.is_empty() {
+            return vec![ParagraphData {
+                text: String::new(),
+                runs: Vec::new(),
+            }];
         }
+        
+        text.lines()
+            .map(|line| ParagraphData {
+                text: line.to_string(),
+                runs: Vec::new(),
+            })
+            .collect()
     }
 
     fn break_paragraph_into_lines(&self, paragraph: &ParagraphData, max_width: f64) -> Vec<LineData> {

@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trevia Editor Engine V2 - Piece Table</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            overflow: hidden;
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .toolbar {
+            background: #2c3e50;
+            color: white;
+            padding: 12px 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .toolbar button {
+            background: #3498db;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .toolbar button:hover {
+            background: #2980b9;
+        }
+
+        .toolbar .separator {
+            width: 1px;
+            height: 24px;
+            background: rgba(255,255,255,0.2);
+        }
+
+        .toolbar .info {
+            margin-left: auto;
+            font-size: 13px;
+            opacity: 0.9;
+            display: flex;
+            gap: 20px;
+        }
+
+        .editor-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .pages-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 30px;
+            background: #e9ecef;
+        }
+
+        .page {
+            width: 794px;
+            height: 1123px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            position: relative;
+            cursor: text;
+            user-select: none;
+        }
+
+        .page canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .page-number {
+            position: absolute;
+            bottom: 10px;
+            right: 15px;
+            font-size: 11px;
+            color: #999;
+            background: rgba(255,255,255,0.9);
+            padding: 2px 8px;
+            border-radius: 3px;
+        }
+
+        .status-bar {
+            background: #34495e;
+            color: white;
+            padding: 8px 20px;
+            font-size: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .shortcuts {
+            opacity: 0.8;
+            font-size: 11px;
+        }
+
+        /* Selection highlight */
+        .selection-overlay {
+            position: absolute;
+            background: rgba(52, 152, 219, 0.3);
+            pointer-events: none;
+        }
+
+        /* Cursor */
+        .cursor {
+            position: absolute;
+            width: 2px;
+            background: #2c3e50;
+            animation: blink 1s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0; }
+        }
+
+        /* Hidden input */
+        .hidden-input {
+            position: absolute;
+            left: -9999px;
+            top: -9999px;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            font-size: 18px;
+            color: #666;
+        }
+
+        /* Debug panel */
+        .debug-panel {
+            position: fixed;
+            right: 20px;
+            top: 80px;
+            width: 300px;
+            background: rgba(255,255,255,0.95);
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            font-size: 12px;
+            font-family: monospace;
+            display: none;
+            max-height: 400px;
+            overflow-y: auto;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .debug-panel.visible {
+            display: block;
+        }
+
+        .debug-panel h3 {
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .debug-panel pre {
+            background: #f5f5f5;
+            padding: 8px;
+            border-radius: 3px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="toolbar">
+            <button onclick="actions.newDocument()">📄 Novo</button>
+            <button onclick="actions.insertSampleText()">📝 Texto Exemplo</button>
+            <div class="separator"></div>
+            <button onclick="actions.selectAll()">Selecionar Tudo</button>
+            <button onclick="actions.copy()">📋 Copiar</button>
+            <button onclick="actions.paste()">📌 Colar</button>
+            <div class="separator"></div>
+            <button onclick="actions.toggleDebug()">🐛 Debug</button>
+            <div class="info">
+                <span>Páginas: <strong id="page-count">0</strong></span>
+                <span>Caracteres: <strong id="char-count">0</strong></span>
+                <span>Linha: <strong id="line-num">1</strong></span>
+                <span>Coluna: <strong id="col-num">1</strong></span>
+            </div>
+        </div>
+
+        <div class="editor-container">
+            <div class="pages-scroll" id="pages-container">
+                <div class="loading">Carregando Trevia Editor V2...</div>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <span id="status">Inicializando...</span>
+            <span class="shortcuts">
+                Ctrl+A: Selecionar | Ctrl+C: Copiar | Ctrl+V: Colar | Ctrl+X: Recortar
+            </span>
+        </div>
+    </div>
+
+    <!-- Debug Panel -->
+    <div class="debug-panel" id="debug-panel">
+        <h3>🐛 Debug Info</h3>
+        <pre id="debug-content"></pre>
+    </div>
+
+    <!-- Hidden input for keyboard events -->
+    <textarea id="hidden-input" class="hidden-input" autocomplete="off" spellcheck="false"></textarea>
+
+    <script type="module">
+        import init, { TreviaEditorV2 } from './pkg/trevia_editor_engine.js';
+
+        let editor = null;
+        let hiddenInput = null;
+        let isMouseDown = false;
+        let debugMode = false;
+
+        // Initialize editor
+        async function initEditor() {
+            try {
+                await init();
+                
+                editor = new TreviaEditorV2(794, 1123); // A4 dimensions
+                editor.set_margins(60, 60, 60, 60);
+                editor.set_line_height(24);
+                editor.set_char_width(8.5);
+                
+                hiddenInput = document.getElementById('hidden-input');
+                
+                setupEventListeners();
+                updateUI();
+                
+                setStatus('✅ Editor V2 iniciado - Piece Table Engine');
+                
+            } catch (error) {
+                console.error('Erro ao inicializar:', error);
+                setStatus('❌ Erro: ' + error.message);
+            }
+        }
+
+        // Event listeners
+        function setupEventListeners() {
+            // Keyboard events
+            hiddenInput.addEventListener('input', handleInput);
+            hiddenInput.addEventListener('keydown', handleKeyDown);
+            hiddenInput.addEventListener('paste', handlePaste);
+            hiddenInput.addEventListener('cut', handleCut);
+            
+            // Global keyboard shortcuts
+            document.addEventListener('keydown', handleGlobalKeyDown);
+            
+            // Focus management
+            document.addEventListener('click', (e) => {
+                if (e.target.closest('.pages-scroll')) {
+                    hiddenInput.focus();
+                }
+            });
+            
+            // Initial focus
+            hiddenInput.focus();
+        }
+
+        // Handle text input
+        function handleInput(event) {
+            const value = hiddenInput.value;
+            if (value && editor) {
+                editor.insert_text(value);
+                hiddenInput.value = '';
+                render();
+                updateUI();
+            }
+        }
+
+        // Handle special keys
+        function handleKeyDown(event) {
+            if (!editor) return;
+            
+            const handled = editor.handle_key(
+                event.key,
+                event.ctrlKey || event.metaKey,
+                event.shiftKey,
+                event.altKey
+            );
+            
+            if (handled) {
+                event.preventDefault();
+                render();
+                updateUI();
+            }
+        }
+
+        // Handle paste
+        function handlePaste(event) {
+            if (!editor) return;
+            
+            event.preventDefault();
+            const text = (event.clipboardData || window.clipboardData).getData('text');
+            
+            if (text) {
+                editor.insert_text(text);
+                render();
+                updateUI();
+            }
+        }
+
+        // Handle cut
+        function handleCut(event) {
+            if (!editor || !editor.has_selection()) return;
+            
+            event.preventDefault();
+            const selectedText = editor.get_selected_text();
+            
+            if (selectedText) {
+                navigator.clipboard.writeText(selectedText);
+                editor.delete_backward(1); // This will delete selection
+                render();
+                updateUI();
+            }
+        }
+
+        // Global keyboard shortcuts
+        function handleGlobalKeyDown(event) {
+            if (!editor) return;
+            
+            if (event.ctrlKey || event.metaKey) {
+                switch (event.key) {
+                    case 'a':
+                        event.preventDefault();
+                        editor.select_all();
+                        render();
+                        updateUI();
+                        break;
+                    case 'c':
+                        if (editor.has_selection()) {
+                            navigator.clipboard.writeText(editor.get_selected_text());
+                        }
+                        break;
+                }
+            }
+        }
+
+        // Handle mouse events
+        function handleMouseDown(event, pageIndex) {
+            if (!editor) return;
+            
+            isMouseDown = true;
+            
+            const canvas = event.target;
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            editor.handle_click(pageIndex, x, y);
+            render();
+            updateUI();
+            
+            hiddenInput.focus();
+        }
+
+        function handleMouseMove(event, pageIndex) {
+            if (!editor || !isMouseDown) return;
+            
+            const canvas = event.target;
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            
+            editor.handle_drag(pageIndex, x, y);
+            render();
+            updateUI();
+        }
+
+        function handleMouseUp() {
+            isMouseDown = false;
+        }
+
+        // Rendering
+        function render() {
+            if (!editor) return;
+            
+            editor.update_layout();
+            
+            const container = document.getElementById('pages-container');
+            const pageCount = editor.get_page_count();
+            
+            // Clear existing pages
+            container.innerHTML = '';
+            
+            // Render each page
+            for (let i = 0; i < pageCount; i++) {
+                const pageDiv = createPage(i);
+                container.appendChild(pageDiv);
+                renderPage(pageDiv.querySelector('canvas'), i);
+            }
+        }
+
+        function createPage(index) {
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'page';
+            
+            const canvas = document.createElement('canvas');
+            const scale = window.devicePixelRatio || 1;
+            canvas.width = 794 * scale;
+            canvas.height = 1123 * scale;
+            canvas.style.width = '794px';
+            canvas.style.height = '1123px';
+            
+            // Mouse events
+            canvas.addEventListener('mousedown', (e) => handleMouseDown(e, index));
+            canvas.addEventListener('mousemove', (e) => handleMouseMove(e, index));
+            canvas.addEventListener('mouseup', handleMouseUp);
+            canvas.addEventListener('mouseleave', handleMouseUp);
+            
+            const pageNumber = document.createElement('div');
+            pageNumber.className = 'page-number';
+            pageNumber.textContent = `Página ${index + 1}`;
+            
+            pageDiv.appendChild(canvas);
+            pageDiv.appendChild(pageNumber);
+            
+            return pageDiv;
+        }
+
+        function renderPage(canvas, pageIndex) {
+            const ctx = canvas.getContext('2d');
+            const scale = window.devicePixelRatio || 1;
+            
+            ctx.scale(scale, scale);
+            ctx.clearRect(0, 0, 794, 1123);
+            
+            // Background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 794, 1123);
+            
+            // Margins
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.setLineDash([5, 5]);
+            ctx.strokeRect(60, 60, 674, 1003);
+            ctx.setLineDash([]);
+            
+            // Get page data
+            const pageData = editor.get_page(pageIndex);
+            if (!pageData) return;
+            
+            // Render text
+            ctx.fillStyle = '#000000';
+            ctx.font = '16px "Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif';
+            ctx.textBaseline = 'top';
+            
+            if (pageData.lines) {
+                pageData.lines.forEach(line => {
+                    if (line.text) {
+                        ctx.fillText(line.text, 60, line.y);
+                    }
+                });
+            }
+            
+            // Render selection
+            if (editor.has_selection()) {
+                const selection = editor.get_selection();
+                if (selection && pageData.lines) {
+                    ctx.fillStyle = 'rgba(52, 152, 219, 0.3)';
+                    
+                    pageData.lines.forEach(line => {
+                        const lineStart = line.start_position;
+                        const lineEnd = line.end_position;
+                        const selStart = selection[0];
+                        const selEnd = selection[1];
+                        
+                        if (lineEnd >= selStart && lineStart <= selEnd) {
+                            const startInLine = Math.max(0, selStart - lineStart);
+                            const endInLine = Math.min(line.text.length, selEnd - lineStart);
+                            
+                            if (startInLine < endInLine) {
+                                const x1 = 60 + startInLine * 8.5;
+                                const width = (endInLine - startInLine) * 8.5;
+                                ctx.fillRect(x1, line.y, width, 24);
+                            }
+                        }
+                    });
+                }
+            }
+            
+            // Render cursor
+            const cursorCoords = editor.get_cursor_coords();
+            if (cursorCoords && cursorCoords[0] === pageIndex) {
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(cursorCoords[1], cursorCoords[2]);
+                ctx.lineTo(cursorCoords[1], cursorCoords[2] + 24);
+                ctx.stroke();
+            }
+        }
+
+        // UI Updates
+        function updateUI() {
+            if (!editor) return;
+            
+            document.getElementById('page-count').textContent = editor.get_page_count();
+            document.getElementById('char-count').textContent = editor.length();
+            document.getElementById('line-num').textContent = editor.get_cursor_line();
+            document.getElementById('col-num').textContent = editor.get_cursor_column();
+            
+            if (debugMode) {
+                updateDebug();
+            }
+        }
+
+        function updateDebug() {
+            const debugInfo = editor.debug_info;
+            document.getElementById('debug-content').textContent = 
+                JSON.stringify(debugInfo, null, 2);
+        }
+
+        function setStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        // Actions
+        window.actions = {
+            newDocument() {
+                if (!editor) return;
+                
+                if (confirm('Criar novo documento? O conteúdo atual será perdido.')) {
+                    editor = new TreviaEditorV2(794, 1123);
+                    editor.set_margins(60, 60, 60, 60);
+                    render();
+                    updateUI();
+                    setStatus('Novo documento criado');
+                }
+            },
+
+            insertSampleText() {
+                if (!editor) return;
+                
+                const sampleText = `TREVIA EDITOR V2 - DEMONSTRAÇÃO
+
+Bem-vindo ao Trevia Editor V2! Esta nova versão utiliza a estrutura de dados Piece Table, a mesma usada pelo Visual Studio Code, proporcionando excelente performance e eficiência de memória.
+
+CARACTERÍSTICAS DA PIECE TABLE:
+
+1. Performance O(1) para inserção em qualquer posição
+2. Uso eficiente de memória - texto original nunca é modificado
+3. Undo/Redo trivial - texto deletado permanece na estrutura
+4. Ideal para documentos grandes e edição colaborativa
+
+MELHORIAS IMPLEMENTADAS:
+
+• Arquitetura completamente reescrita
+• Layout engine otimizado
+• Renderização de alta qualidade com devicePixelRatio
+• Seleção e navegação melhoradas
+• Sistema de eventos robusto
+
+Este editor suporta:
+- Digitação fluida sem inversão de caracteres
+- Backspace e Delete funcionais
+- Copiar, colar e recortar
+- Seleção com mouse
+- Navegação com teclado
+- Paginação automática A4
+
+Continue digitando para testar a paginação automática. O texto fluirá naturalmente entre as páginas, mantendo a formatação e permitindo edição contínua em qualquer ponto do documento.
+
+A implementação em Rust com WebAssembly garante performance próxima ao nativo, enquanto a estrutura Piece Table oferece a robustez necessária para um editor profissional.`;
+                
+                editor.insert_text(sampleText);
+                render();
+                updateUI();
+                setStatus('Texto de exemplo inserido');
+            },
+
+            selectAll() {
+                if (!editor) return;
+                editor.select_all();
+                render();
+                updateUI();
+            },
+
+            copy() {
+                if (!editor || !editor.has_selection()) return;
+                navigator.clipboard.writeText(editor.get_selected_text());
+                setStatus('Texto copiado');
+            },
+
+            paste() {
+                hiddenInput.focus();
+                document.execCommand('paste');
+            },
+
+            toggleDebug() {
+                debugMode = !debugMode;
+                const panel = document.getElementById('debug-panel');
+                panel.classList.toggle('visible', debugMode);
+                
+                if (debugMode) {
+                    updateDebug();
+                }
+            }
+        };
+
+        // Global mouse up handler
+        document.addEventListener('mouseup', handleMouseUp);
+
+        // Initialize when page loads
+        initEditor();
+    </script>
+</body>
+</html>

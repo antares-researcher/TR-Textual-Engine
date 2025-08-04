@@ -102,8 +102,13 @@
         }
 
         .editor-focused {
-            outline: 2px solid #3498db;
-            outline-offset: -2px;
+            outline: 3px solid #3498db;
+            outline-offset: -3px;
+            border-radius: 8px;
+        }
+
+        .pages-container.editor-focused {
+            background: #f0f8ff;
         }
 
         .hidden-input {
@@ -149,6 +154,15 @@
             border-top: 1px solid #ddd;
             font-size: 12px;
             color: #666;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .instructions {
+            font-size: 11px;
+            color: #888;
+            font-style: italic;
         }
     </style>
 </head>
@@ -170,9 +184,15 @@
         <div class="pages-container" id="pages-container">
             <div class="loading">Carregando Trevia Editor Engine...</div>
         </div>
+        
+        <!-- Input invisível para capturar eventos de teclado -->
+        <textarea id="hidden-input" class="hidden-input" autocomplete="off" spellcheck="false"></textarea>
 
         <div class="status-bar">
             <span id="status">Inicializando...</span>
+            <span class="instructions">
+                💡 Clique no editor e digite | Ctrl+A: Selecionar tudo | Ctrl+C: Copiar | Ctrl+V: Colar
+            </span>
         </div>
     </div>
 
@@ -182,6 +202,9 @@
         let editor = null;
         let canvases = [];
         let debugMode = false;
+        let hiddenInput = null;
+        let isComposing = false;
+        let editorFocused = false;
 
         async function initEditor() {
             try {
@@ -205,44 +228,155 @@
         }
 
         function setupEventListeners() {
-            document.addEventListener('keydown', handleKeyDown);
-            document.addEventListener('keypress', handleKeyPress);
+            hiddenInput = document.getElementById('hidden-input');
+            
+            // Eventos do input invisível
+            hiddenInput.addEventListener('input', handleInput);
+            hiddenInput.addEventListener('keydown', handleKeyDown);
+            hiddenInput.addEventListener('paste', handlePaste);
+            hiddenInput.addEventListener('compositionstart', () => isComposing = true);
+            hiddenInput.addEventListener('compositionend', handleCompositionEnd);
+            
+            // Eventos globais
+            document.addEventListener('click', handleGlobalClick);
+            document.addEventListener('keydown', handleGlobalKeyDown);
+            
+            // Foco inicial
+            focusEditor();
         }
 
-        function handleKeyDown(event) {
-            if (!editor) return;
-
-            const key = event.key;
+        function handleInput(event) {
+            if (!editor || isComposing) return;
             
-            if (key === 'Backspace') {
-                event.preventDefault();
-                editor.delete_text(1);
+            const inputValue = hiddenInput.value;
+            if (inputValue) {
+                editor.insert_text(inputValue);
+                hiddenInput.value = '';
                 renderPages();
-                updateUI();
-            } else if (key === 'Delete') {
-                event.preventDefault();
-                // Implementar delete para frente
-            } else if (key === 'ArrowLeft') {
-                event.preventDefault();
-                editor.move_cursor_by(-1);
-                updateUI();
-            } else if (key === 'ArrowRight') {
-                event.preventDefault();
-                editor.move_cursor_by(1);
                 updateUI();
             }
         }
 
-        function handleKeyPress(event) {
-            if (!editor) return;
-            
-            const char = event.key;
-            
-            if (char.length === 1 && !event.ctrlKey && !event.altKey && !event.metaKey) {
-                event.preventDefault();
-                editor.insert_text(char);
+        function handleCompositionEnd(event) {
+            isComposing = false;
+            if (event.data && editor) {
+                editor.insert_text(event.data);
+                hiddenInput.value = '';
                 renderPages();
                 updateUI();
+            }
+        }
+
+        function handleKeyDown(event) {
+            if (!editor || !editorFocused) return;
+
+            const key = event.key;
+            
+            // Prevenir comportamento padrão para teclas de controle
+            if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(key)) {
+                event.preventDefault();
+            }
+            
+            switch (key) {
+                case 'Backspace':
+                    if (editor.has_selection()) {
+                        editor.delete_selection();
+                    } else {
+                        const cursorPos = editor.get_cursor_position();
+                        if (cursorPos.offset > 0) {
+                            editor.delete_text(cursorPos.offset - 1, 1);
+                            editor.set_cursor_position(cursorPos.offset - 1);
+                        }
+                    }
+                    renderPages();
+                    updateUI();
+                    break;
+                    
+                case 'Delete':
+                    // Implementar delete para frente se necessário
+                    break;
+                    
+                case 'ArrowLeft':
+                    if (event.shiftKey) {
+                        // Implementar seleção com Shift+Arrow
+                    } else {
+                        editor.clear_selection();
+                        editor.move_cursor_by(-1);
+                    }
+                    updateUI();
+                    break;
+                    
+                case 'ArrowRight':
+                    if (event.shiftKey) {
+                        // Implementar seleção com Shift+Arrow
+                    } else {
+                        editor.clear_selection();
+                        editor.move_cursor_by(1);
+                    }
+                    updateUI();
+                    break;
+                    
+                case 'Enter':
+                    editor.insert_text('\n');
+                    renderPages();
+                    updateUI();
+                    break;
+            }
+        }
+
+        function handlePaste(event) {
+            if (!editor || !editorFocused) return;
+            
+            event.preventDefault();
+            
+            const clipboardData = event.clipboardData || window.clipboardData;
+            const pastedText = clipboardData.getData('text');
+            
+            if (pastedText) {
+                if (editor.has_selection()) {
+                    editor.delete_selection();
+                }
+                editor.insert_text(pastedText);
+                renderPages();
+                updateUI();
+                
+                // Scroll para a posição atual após colar
+                setTimeout(() => {
+                    scrollToCursor();
+                }, 100);
+            }
+        }
+
+        function handleGlobalClick(event) {
+            // Verifica se o clique foi dentro do editor
+            const container = document.getElementById('pages-container');
+            if (container.contains(event.target)) {
+                focusEditor();
+            } else {
+                blurEditor();
+            }
+        }
+
+        function handleGlobalKeyDown(event) {
+            // Atalhos globais (Ctrl+A, Ctrl+C, etc.)
+            if (event.ctrlKey || event.metaKey) {
+                switch (event.key) {
+                    case 'a':
+                        if (editorFocused && editor) {
+                            event.preventDefault();
+                            editor.set_selection(0, editor.get_document_length());
+                            updateUI();
+                        }
+                        break;
+                        
+                    case 'c':
+                        if (editorFocused && editor && editor.has_selection()) {
+                            // Copy é tratado automaticamente pelo browser
+                            const selectedText = editor.get_selected_text();
+                            navigator.clipboard.writeText(selectedText).catch(console.error);
+                        }
+                        break;
+                }
             }
         }
 
@@ -294,8 +428,17 @@
                 pageDiv.className = 'page';
                 
                 const canvas = document.createElement('canvas');
-                canvas.width = 794;   // A4 width
-                canvas.height = 1123;  // A4 height
+                const scale = window.devicePixelRatio || 1;
+                
+                // Dimensões lógicas A4
+                const logicWidth = 794;
+                const logicHeight = 1123;
+                
+                // Configurar canvas para alta resolução
+                canvas.width = logicWidth * scale;
+                canvas.height = logicHeight * scale;
+                canvas.style.width = logicWidth + 'px';
+                canvas.style.height = logicHeight + 'px';
                 canvas.addEventListener('click', (e) => handleCanvasClick(e, i));
                 
                 const pageNumber = document.createElement('div');
@@ -313,16 +456,25 @@
 
         function renderPage(canvas, pageIndex) {
             const ctx = canvas.getContext('2d');
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const scale = window.devicePixelRatio || 1;
+            
+            // Escalar o contexto para alta resolução
+            ctx.scale(scale, scale);
+            
+            // Dimensões lógicas
+            const logicWidth = 794;
+            const logicHeight = 1123;
+            
+            ctx.clearRect(0, 0, logicWidth, logicHeight);
             
             // Fundo da página
             ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0, 0, logicWidth, logicHeight);
             
             // Margens (visual)
             ctx.strokeStyle = '#e0e0e0';
             ctx.setLineDash([5, 5]);
-            ctx.strokeRect(60, 60, canvas.width - 120, canvas.height - 120);
+            ctx.strokeRect(60, 60, logicWidth - 120, logicHeight - 120);
             ctx.setLineDash([]);
             
             if (!editor) return;
@@ -334,12 +486,14 @@
                 const layout = pageLayout;
                 
                 ctx.fillStyle = '#000000';
-                ctx.font = '14px Arial';  // Fonte maior e mais legível
+                ctx.font = '16px "Segoe UI", Arial, sans-serif';  // Fonte melhor e mais legível
+                ctx.textBaseline = 'top';
                 
                 if (layout.lines) {
-                    layout.lines.forEach(line => {
-                        if (line.text && line.text.trim()) {
-                            ctx.fillText(line.text, 70, line.y_position + 18);
+                    layout.lines.forEach((line, index) => {
+                        if (line.text) {
+                            const y = 80 + (index * 22); // Espaçamento uniforme entre linhas
+                            ctx.fillText(line.text, 70, y);
                         }
                     });
                 }
@@ -438,6 +592,44 @@ Continue digitando para testar a paginação automática...`;
         function scrollToBottom() {
             const container = document.getElementById('pages-container');
             container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+        }
+
+        function focusEditor() {
+            editorFocused = true;
+            hiddenInput.focus();
+            
+            // Adicionar indicação visual de foco
+            const container = document.getElementById('pages-container');
+            container.classList.add('editor-focused');
+            
+            updateStatus('Editor focado - digite para inserir texto');
+        }
+
+        function blurEditor() {
+            editorFocused = false;
+            
+            // Remover indicação visual de foco
+            const container = document.getElementById('pages-container');
+            container.classList.remove('editor-focused');
+            
+            updateStatus('Clique no editor para começar a digitar');
+        }
+
+        function scrollToCursor() {
+            if (!editor) return;
+            
+            const cursorPos = editor.get_cursor_position();
+            const container = document.getElementById('pages-container');
+            
+            // Calcular posição aproximada da página no scroll
+            const pageHeight = 1123 + 30; // altura da página + gap
+            const pageScrollPosition = cursorPos.page * pageHeight;
+            
+            // Scroll suave para a página do cursor
+            container.scrollTo({
+                top: pageScrollPosition,
+                behavior: 'smooth'
+            });
         }
 
         // Tornar funções globais para os botões

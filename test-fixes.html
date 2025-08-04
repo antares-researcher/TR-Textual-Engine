@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste de Correções</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-container { 
+            border: 2px solid #3498db; 
+            padding: 20px; 
+            margin: 20px 0;
+            min-height: 100px;
+            background: #f0f8ff;
+        }
+        button { margin: 5px; padding: 8px 16px; background: #3498db; color: white; border: none; border-radius: 4px; }
+        .info { margin: 10px 0; padding: 10px; background: #ecf0f1; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Teste de Correções</h1>
+    
+    <div>
+        <button onclick="testTyping()">✏️ Teste Digitação</button>
+        <button onclick="testBackspace()">⬅️ Teste Backspace</button>
+        <button onclick="testOrder()">🔄 Teste Ordem</button>
+        <button onclick="clearTest()">🗑️ Limpar</button>
+    </div>
+    
+    <div class="test-container" id="test-area">
+        <p><strong>Status:</strong> <span id="status">Carregando...</span></p>
+        <p><strong>Texto atual:</strong> "<span id="current-text">-</span>"</p>
+        <p><strong>Comprimento:</strong> <span id="text-length">0</span> caracteres</p>
+        <p><strong>Cursor:</strong> Posição <span id="cursor-pos">0</span></p>
+    </div>
+
+    <div class="info">
+        <h3>✅ Correções Aplicadas:</h3>
+        <ul>
+            <li><strong>Texto invertido:</strong> Modelo de documento simplificado</li>
+            <li><strong>Backspace:</strong> Lógica de deletar corrigida</li>
+            <li><strong>Fonte:</strong> High-DPI e fonte melhorada</li>
+        </ul>
+    </div>
+
+    <script type="module">
+        import init, { TreviaEditor } from './pkg/trevia_editor_engine.js';
+
+        let editor = null;
+
+        async function initTest() {
+            try {
+                await init();
+                editor = new TreviaEditor(400, 300);
+                document.getElementById('status').textContent = '✅ Inicializado com sucesso!';
+                updateDisplay();
+                
+                console.log('Editor inicializado:', editor);
+                
+            } catch (error) {
+                console.error('Erro:', error);
+                document.getElementById('status').textContent = '❌ Erro: ' + error.message;
+            }
+        }
+
+        function updateDisplay() {
+            if (!editor) return;
+            
+            const text = editor.get_document_text();
+            const cursor = editor.get_cursor_position();
+            
+            document.getElementById('current-text').textContent = text || '(vazio)';
+            document.getElementById('text-length').textContent = text.length;
+            document.getElementById('cursor-pos').textContent = cursor.offset;
+            
+            console.log('Estado:', { text, cursor });
+        }
+
+        function testTyping() {
+            if (!editor) return;
+            
+            console.log('Teste de digitação...');
+            editor.insert_text('Leonardi');
+            updateDisplay();
+            
+            const result = editor.get_document_text();
+            if (result === 'Leonardi') {
+                document.getElementById('status').textContent = '✅ Digitação OK - Texto correto!';
+            } else {
+                document.getElementById('status').textContent = `❌ Erro - Esperado: "Leonardi", Obtido: "${result}"`;
+            }
+        }
+
+        function testBackspace() {
+            if (!editor) return;
+            
+            console.log('Teste de backspace...');
+            const beforeLength = editor.get_document_length();
+            const cursorPos = editor.get_cursor_position();
+            
+            if (cursorPos.offset > 0) {
+                editor.delete_text(cursorPos.offset - 1, 1);
+                editor.set_cursor_position(cursorPos.offset - 1);
+                
+                updateDisplay();
+                
+                const afterLength = editor.get_document_length();
+                if (afterLength === beforeLength - 1) {
+                    document.getElementById('status').textContent = '✅ Backspace OK - Texto deletado!';
+                } else {
+                    document.getElementById('status').textContent = '❌ Backspace não funcionou';
+                }
+            } else {
+                document.getElementById('status').textContent = '⚠️ Cursor no início - nada para deletar';
+            }
+        }
+
+        function testOrder() {
+            if (!editor) return;
+            
+            console.log('Teste de ordem...');
+            clearTest();
+            
+            // Inserir caracteres um por um
+            const word = 'TESTE';
+            for (let i = 0; i < word.length; i++) {
+                editor.insert_text(word[i]);
+                console.log(`Inseriu '${word[i]}', texto atual: "${editor.get_document_text()}"`);
+            }
+            
+            updateDisplay();
+            
+            const result = editor.get_document_text();
+            if (result === word) {
+                document.getElementById('status').textContent = '✅ Ordem OK - Sem inversão!';
+            } else {
+                document.getElementById('status').textContent = `❌ Ordem errada - Esperado: "${word}", Obtido: "${result}"`;
+            }
+        }
+
+        function clearTest() {
+            if (!editor) return;
+            
+            const length = editor.get_document_length();
+            if (length > 0) {
+                editor.delete_text(0, length);
+            }
+            editor.set_cursor_position(0);
+            updateDisplay();
+            document.getElementById('status').textContent = '🗑️ Texto limpo';
+        }
+
+        window.testTyping = testTyping;
+        window.testBackspace = testBackspace;
+        window.testOrder = testOrder;
+        window.clearTest = clearTest;
+
+        initTest();
+    </script>
+</body>
+</html>
